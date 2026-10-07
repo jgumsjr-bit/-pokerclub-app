@@ -1,0 +1,29 @@
+[build]
+  publish = "."
+  command = "node scripts/write-config.js"
+
+[[redirects]]
+  from = "/api/supabase-config"
+  to = "/.netlify/functions/supabase-config"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

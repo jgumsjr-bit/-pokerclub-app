@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TESTE DE BANCO COMPARTILHADO</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #07140f; color: #f4ead0; padding: 16px; }
+    h1 { font-size: 20px; color: #f0d78c; margin: 0 0 12px; }
+    .box { background: #10261d; border: 1px solid rgba(212,175,55,.2); border-radius: 12px; padding: 14px; margin: 0 0 12px; }
+    .ok { color: #7dffa9; } .err { color: #ffb4ab; } .wait { color: #ffcc66; }
+    label { display: block; margin: 8px 0 4px; font-size: 13px; color: #8aa396; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid rgba(212,175,55,.25); background: #0c1f18; color: inherit; }
+    button { width: 100%; margin-top: 8px; min-height: 44px; border: 0; border-radius: 10px; background: #d4af37; color: #07140f; font-weight: 700; }
+    button.ghost { background: #1a3328; color: #f0d78c; }
+    button.danger { background: #7a1f1f; color: #fff; width: auto; min-height: 36px; padding: 0 10px; margin: 0; }
+    .item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(212,175,55,.12); }
+    .muted { color: #8aa396; font-size: 13px; }
+    #list:empty::after { content: "Nenhum jogador no banco."; color: #8aa396; }
+  </style>
+</head>
+<body>
+  <h1>TESTE DE BANCO COMPARTILHADO</h1>
+  <div class="box">
+    <div>BANCO ONLINE:</div>
+    <div id="conn" class="wait">Carregando</div>
+    <p class="muted" id="origin">ORIGEM DOS JOGADORES: banco online</p>
+    <p class="muted" id="total">TOTAL DE JOGADORES: 0</p>
+    <p class="muted" id="who">ID DO CLUBE: --</p>
+    <p class="muted" id="last">ULTIMA LEITURA ONLINE: --</p>
+  </div>
+  <div class="box" id="authBox">
+    <label>Nome</label><input id="authName" autocomplete="username">
+    <label>Senha</label><input id="authPass" type="password" autocomplete="current-password">
+    <button type="button" id="btnLogin">ENTRAR NO BANCO</button>
+  </div>
+  <div class="box">
+    <button type="button" id="btnLoad">CARREGAR DO BANCO</button>
+    <label>Nome do jogador</label><input id="playerName" placeholder="TESTE CELULAR A">
+    <button type="button" id="btnAdd">ADICIONAR TESTE</button>
+    <button type="button" class="ghost" id="btnRefresh">ATUALIZAR BANCO</button>
+  </div>
+  <div class="box">
+    <strong>JOGADORES NO BANCO</strong>
+    <div id="list"></div>
+  </div>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/cloud.js"></script>
+  <script>
+    (function () {
+      var conn = document.getElementById("conn");
+      var last = document.getElementById("last");
+      var who = document.getElementById("who");
+      var total = document.getElementById("total");
+      var list = document.getElementById("list");
+      var authBox = document.getElementById("authBox");
+      function now() {
+        var d = new Date();
+        return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0");
+      }
+      function setConn(kind, msg) {
+        conn.className = kind;
+        conn.textContent = msg;
+      }
+      function fail(err) {
+        setConn("err", (err && err.message) || String(err || "falha"));
+      }
+      function signed() {
+        var s = window.PokerStore && PokerStore.session && PokerStore.session();
+        return !!(s && s.id);
+      }
+      function draw(rows) {
+        last.textContent = "ULTIMA LEITURA ONLINE: " + now();
+        list.innerHTML = "";
+        total.textContent = "TOTAL DE JOGADORES: " + (rows ? rows.length : 0);
+        (rows || []).forEach(function (p) {
+          var row = document.createElement("div");
+          row.className = "item";
+          var meta = document.createElement("div");
+          meta.innerHTML = "<strong>" + String(p.name || "") + "</strong><div class='muted'>" + String(p.id || "") + "</div>";
+          var btn = document.createElement("button");
+          btn.className = "danger";
+          btn.type = "button";
+          btn.textContent = "EXCLUIR TESTE";
+          btn.onclick = function () { del(p.id); };
+          row.appendChild(meta);
+          row.appendChild(btn);
+          list.appendChild(row);
+        });
+      }
+      function load() {
+        setConn("wait", "Carregando");
+        return PokerCloud.fetchPlayers().then(function (rows) {
+          setConn("ok", "Banco conectado");
+          draw(rows);
+          return rows;
+        }).catch(fail);
+      }
+      function del(id) {
+        PokerCloud.removePlayer(id).then(function () {
+          return load();
+        }).catch(fail);
+      }
+      function boot() {
+        setConn("wait", "Carregando");
+        if (typeof PokerCloud === "undefined") return fail(new Error("cloud.js nao carregou"));
+        if (!PokerCloud.init()) {
+          return fail((PokerCloud.configMissingError && PokerCloud.configMissingError()) || new Error((PokerCloud.status() && PokerCloud.status().error) || "init falhou"));
+        }
+        var cfg = PokerCloud.getConfig() || {};
+        who.textContent = "ID DO CLUBE: " + (cfg.clubId || "pokerclub");
+        if (window.PokerStore && PokerStore.loadSession) PokerStore.loadSession();
+        if (signed()) {
+          authBox.hidden = true;
+          PokerCloud.start();
+          setConn("ok", "Banco conectado");
+          load();
+        } else {
+          setConn("err", "SUPABASE ERROR: {code: AUTH, message: sem sessao autenticada, details: SELECT/INSERT exigem JWT, hint: entre com nome e senha}");
+        }
+      }
+      document.getElementById("btnLogin").onclick = function () {
+        setConn("wait", "Carregando");
+        PokerCloud.signIn(document.getElementById("authName").value, document.getElementById("authPass").value)
+          .then(function () {
+            authBox.hidden = true;
+            setConn("ok", "Banco conectado");
+            return load();
+          }).catch(fail);
+      };
+      document.getElementById("btnLoad").onclick = load;
+      document.getElementById("btnRefresh").onclick = load;
+      document.getElementById("btnAdd").onclick = function () {
+        var name = String(document.getElementById("playerName").value || "").trim();
+        if (!name) return fail(new Error("Informe o nome do jogador"));
+        var player = {
+          id: (window.PokerStore && PokerStore.uid) ? PokerStore.uid() : String(Date.now()),
+          name: name,
+          nickname: "",
+          phone: "",
+          createdAt: new Date().toISOString().slice(0, 10)
+        };
+        PokerCloud.upsertPlayer(player).then(function () {
+          document.getElementById("playerName").value = "";
+          return load();
+        }).catch(fail);
+      };
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+      else boot();
+    })();
+  </script>
+</body>
+</html>
